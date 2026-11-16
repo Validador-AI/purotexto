@@ -545,9 +545,9 @@
         <button type="button" class="pago-periodo-btn" role="radio" aria-checked="false" data-periodo="anual">Anual <small>2 meses gratis</small></button>
       </div>
       <div class="pago-opciones">
-        <button type="button" class="pago-opcion" data-proveedor="lemon">
-          <strong id="pago-lemon-titulo">Tarjeta · US$8,99 por mes</strong>
-          <span id="pago-lemon-detalle">Suscripción mensual. Se renueva sola y la cancelás cuando quieras.</span>
+        <button type="button" class="pago-opcion" data-proveedor="polar">
+          <strong id="pago-polar-titulo">Tarjeta · US$8,99 por mes</strong>
+          <span id="pago-polar-detalle">Suscripción mensual. Se renueva sola y la cancelás cuando quieras.</span>
         </button>
         <button type="button" class="pago-opcion" data-proveedor="mercadopago">
           <strong id="pago-mp-titulo">Mercado Pago · en pesos</strong>
@@ -875,12 +875,12 @@
       }
       function actualizarTextosPago() {
         var anual = periodoElegido === 'anual';
-        var tituloLemon = document.getElementById('pago-lemon-titulo');
-        var detalleLemon = document.getElementById('pago-lemon-detalle');
+        var tituloPolar = document.getElementById('pago-polar-titulo');
+        var detallePolar = document.getElementById('pago-polar-detalle');
         var tituloMp = document.getElementById('pago-mp-titulo');
         var detalleMp = document.getElementById('pago-mp-detalle');
-        if (tituloLemon) tituloLemon.textContent = anual ? 'Tarjeta · US$89 por año' : 'Tarjeta · US$8,99 por mes';
-        if (detalleLemon) detalleLemon.textContent = anual
+        if (tituloPolar) tituloPolar.textContent = anual ? 'Tarjeta · US$89 por año' : 'Tarjeta · US$8,99 por mes';
+        if (detallePolar) detallePolar.textContent = anual
           ? 'Suscripción anual: un solo cobro por año. Se renueva sola y la cancelás cuando quieras.'
           : 'Suscripción mensual. Se renueva sola y la cancelás cuando quieras.';
         var monto = preciosPesos && preciosPesos[anual ? 'anual' : 'mensual'];
@@ -988,7 +988,7 @@
         });
       });
 
-      // Si Mercado Pago o Lemon devuelven a la persona con un error de pago
+      // Si Mercado Pago o Polar devuelven a la persona con un error de pago
       if (new URLSearchParams(window.location.search).get('pago') === 'error') {
         mostrarAviso('El pago no se completó. No se te cobró nada: podés intentar de nuevo.');
       }
