@@ -7,19 +7,21 @@
 //
 //   POST /api/crear-pago
 //   Encabezado:  Authorization: Bearer <token de sesión>
-//   Cuerpo:      { "proveedor": "lemon" | "mercadopago", "periodo": "mensual" | "anual" }
+//   Cuerpo:      { "proveedor": "polar" | "mercadopago", "periodo": "mensual" | "anual" }
 //                (si falta "periodo", se toma "mensual")
 //   Respuesta:   200 { url }   |   4xx/5xx { error }
 //
 // Variables en Cloudflare (Settings → Variables and Secrets):
 //   Ya existentes:  SUPABASE_SERVICE_ROLE_KEY (Secret)
-//   Lemon Squeezy:  LEMON_API_KEY (Secret), LEMON_STORE_ID,
-//                   LEMON_VARIANT_ID (plan mensual), LEMON_VARIANT_ID_ANUAL (plan anual)
+//   Polar (dólares): POLAR_ACCESS_TOKEN (Secret), POLAR_PRODUCT_ID (plan mensual),
+//                   POLAR_PRODUCT_ID_ANUAL (plan anual),
+//                   POLAR_SERVER (opcional: "sandbox" para pruebas; vacío = producción real)
 //   Mercado Pago:   MP_ACCESS_TOKEN (Secret),
 //                   MP_PRECIO_ARS (mensual, ej: 14900), MP_PRECIO_ARS_ANUAL (ej: 149000)
 //   Opcional:       SITIO_URL (por defecto https://purotexto.com)
 //
-// IMPORTANTE: el user_id viaja al proveedor como dato "propio" del pago. Después
+// IMPORTANTE: el user_id viaja al proveedor como dato "propio" del pago (en Polar,
+// como external_customer_id). Después
 // el webhook lo usa para saber a quién activarle el Premium. Sale siempre del
 // token verificado acá, nunca de lo que mande la página.
 // =============================================================================
@@ -84,43 +86,44 @@ async function perfilPremium(env, userId) {
   return Array.isArray(filas) && filas.length > 0 ? filas[0] : null;
 }
 
-// ----- Lemon Squeezy: suscripción mensual en dólares --------------------------
-async function crearLinkLemon(env, usuario, periodo) {
-  const variante = periodo === 'anual' ? env.LEMON_VARIANT_ID_ANUAL : env.LEMON_VARIANT_ID;
-  const respuesta = await pedir('https://api.lemonsqueezy.com/v1/checkouts', {
+// ----- Polar: suscripción en dólares (tarjeta) --------------------------------
+// Polar actúa como "Merchant of Record": es quien vende, cobra y se ocupa de los impuestos.
+async function crearLinkPolar(env, usuario, periodo, ip) {
+  const producto = periodo === 'anual' ? env.POLAR_PRODUCT_ID_ANUAL : env.POLAR_PRODUCT_ID;
+  const base =
+    String(env.POLAR_SERVER || '').trim().toLowerCase() === 'sandbox'
+      ? 'https://sandbox-api.polar.sh'
+      : 'https://api.polar.sh';
+  const sitio = urlSitio(env);
+
+  const cuerpo = {
+    products: [String(producto).trim()],
+    external_customer_id: usuario.id, // vuelve en el webhook: data.customer.external_id
+    metadata: { user_id: usuario.id, periodo }, // se copia a la suscripción
+    success_url: sitio + '/cuenta.html?pago=ok',
+    return_url: sitio + '/precios.html',
+  };
+  if (usuario.email) cuerpo.customer_email = usuario.email;
+  // Para que Polar detecte bien el país (impuestos y moneda) hay que pasarle la IP real de la persona.
+  if (ip) cuerpo.customer_ip_address = ip;
+
+  const respuesta = await pedir(base + '/v1/checkouts/', {
     method: 'POST',
     headers: {
-      Accept: 'application/vnd.api+json',
-      'Content-Type': 'application/vnd.api+json',
-      Authorization: 'Bearer ' + env.LEMON_API_KEY,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Polar-Version': '2026-10',
+      Authorization: 'Bearer ' + String(env.POLAR_ACCESS_TOKEN).trim(),
     },
-    body: JSON.stringify({
-      data: {
-        type: 'checkouts',
-        attributes: {
-          checkout_options: { logo: true },
-          checkout_data: {
-            email: usuario.email || undefined,
-            custom: { user_id: usuario.id }, // vuelve en el webhook: meta.custom_data.user_id
-          },
-          product_options: {
-            redirect_url: urlSitio(env) + '/cuenta.html?pago=ok',
-          },
-        },
-        relationships: {
-          store: { data: { type: 'stores', id: String(env.LEMON_STORE_ID) } },
-          variant: { data: { type: 'variants', id: String(variante) } },
-        },
-      },
-    }),
+    body: JSON.stringify(cuerpo),
   });
   const datos = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {
-    console.error('Lemon Squeezy rechazó el checkout. Estado:', respuesta.status, JSON.stringify(datos && datos.errors));
-    throw new Error('lemon');
+    console.error('Polar rechazó el checkout. Estado:', respuesta.status, JSON.stringify(datos && (datos.detail || datos.error || datos)));
+    throw new Error('polar');
   }
-  const url = datos && datos.data && datos.data.attributes && datos.data.attributes.url;
-  if (!url) throw new Error('Lemon no devolvió el link');
+  const url = datos && datos.url;
+  if (!url) throw new Error('Polar no devolvió el link');
   return url;
 }
 
@@ -202,29 +205,30 @@ export async function onRequest(context) {
       cuerpo = {};
     }
     const proveedor = cuerpo && cuerpo.proveedor;
-    if (proveedor !== 'lemon' && proveedor !== 'mercadopago') {
+    if (proveedor !== 'polar' && proveedor !== 'mercadopago') {
       return responder(400, { error: 'Elegí cómo querés pagar.' });
     }
 
     const periodo = cuerpo && cuerpo.periodo === 'anual' ? 'anual' : 'mensual';
 
-    // 3) Si ya tiene una suscripción activa en Lemon, no dejamos crear otra
+    // 3) Si ya tiene una suscripción activa con tarjeta (Polar), no dejamos crear otra
     // (se cobraría doble). Con Mercado Pago sí se puede pagar de nuevo: suma 30 días.
     const perfil = await perfilPremium(env, usuario.id);
     const vigente = perfil && perfil.is_premium === true && (!perfil.premium_hasta || new Date(perfil.premium_hasta) > new Date());
-    if (vigente && proveedor === 'lemon' && perfil.premium_proveedor === 'lemon') {
+    if (vigente && proveedor === 'polar' && perfil.premium_proveedor === 'polar') {
       return responder(409, { error: 'Ya tenés una suscripción Premium activa con tarjeta. Para cambiar de plan, escribinos a hola@purotexto.com.' });
     }
 
     // 4) Pedirle el link al proveedor.
     let url;
-    if (proveedor === 'lemon') {
-      const varianteElegida = periodo === 'anual' ? env.LEMON_VARIANT_ID_ANUAL : env.LEMON_VARIANT_ID;
-      if (!env.LEMON_API_KEY || !env.LEMON_STORE_ID || !varianteElegida) {
-        console.error('Faltan variables de Lemon Squeezy');
+    if (proveedor === 'polar') {
+      const productoElegido = periodo === 'anual' ? env.POLAR_PRODUCT_ID_ANUAL : env.POLAR_PRODUCT_ID;
+      if (!env.POLAR_ACCESS_TOKEN || !productoElegido) {
+        console.error('Faltan variables de Polar');
         return responder(503, { error: 'El pago con tarjeta todavía no está disponible.' });
       }
-      url = await crearLinkLemon(env, usuario, periodo);
+      const ip = request.headers.get('CF-Connecting-IP') || '';
+      url = await crearLinkPolar(env, usuario, periodo, ip);
     } else {
       const precioElegido = periodo === 'anual' ? env.MP_PRECIO_ARS_ANUAL : env.MP_PRECIO_ARS;
       if (!env.MP_ACCESS_TOKEN || !precioElegido) {
