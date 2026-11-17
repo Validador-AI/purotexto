@@ -154,12 +154,23 @@ function userIdDe(objeto) {
 
 // ----- La función principal ---------------------------------------------------
 export async function onRequest(context) {
-  const { request, env } = context;
+  const { request } = context;
+  // Se sacan espacios o saltos de línea que pudieron quedar al pegar las variables.
+  const env = Object.assign({}, context.env);
+  ['POLAR_WEBHOOK_SECRET', 'SUPABASE_SERVICE_ROLE_KEY'].forEach((k) => {
+    if (typeof env[k] === 'string') env[k] = env[k].trim();
+  });
 
   if (request.method !== 'POST') return responder(405, { error: 'Método no permitido.' });
-  if (!env.POLAR_WEBHOOK_SECRET || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('Faltan POLAR_WEBHOOK_SECRET o SUPABASE_SERVICE_ROLE_KEY');
-    return responder(500, { error: 'No configurado.' });
+  const falta = [];
+  if (!env.POLAR_WEBHOOK_SECRET) falta.push('POLAR_WEBHOOK_SECRET');
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) falta.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (falta.length) {
+    console.error('Faltan variables:', falta.join(', '));
+    // TEMPORAL (diagnóstico): se muestra cuáles faltan y qué nombres de variables ve el sitio
+    // (solo nombres, nunca valores) para detectar espacios o letras de más. Se saca después.
+    const vistas = Object.keys(context.env).filter((k) => /polar|supabase/i.test(k));
+    return responder(500, { error: 'No configurado. Falta: ' + falta.join(', '), variables_vistas: vistas });
   }
 
   // 1) Verificar la firma. Se usa el cuerpo EXACTO, sin tocar.
@@ -250,4 +261,3 @@ export async function onRequest(context) {
     return responder(500, { error: 'Error al procesar.' });
   }
 }
-
