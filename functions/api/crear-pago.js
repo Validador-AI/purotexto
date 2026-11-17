@@ -68,11 +68,7 @@ async function usuarioDelToken(env, token) {
     method: 'GET',
     headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + token },
   });
-  if (respuesta.status === 401 || respuesta.status === 403) {
-    // TEMPORAL (diagnóstico): se guarda lo que contestó Supabase para poder mostrarlo.
-    const texto = await respuesta.text().catch(() => '');
-    return { fallo: 'Supabase ' + respuesta.status + ': ' + texto.replace(/\s+/g, ' ').slice(0, 140) };
-  }
+  if (respuesta.status === 401 || respuesta.status === 403) return null;
   if (!respuesta.ok) throw new Error('Supabase auth respondió ' + respuesta.status);
   const usuario = await respuesta.json();
   return usuario && usuario.id ? { id: usuario.id, email: usuario.email || '' } : null;
@@ -90,9 +86,21 @@ async function perfilPremium(env, userId) {
   return Array.isArray(filas) && filas.length > 0 ? filas[0] : null;
 }
 
+// Idioma del checkout de Polar: el primero de la lista del navegador que Polar tenga traducido.
+// Si no hay ninguno, español (el idioma del sitio).
+const IDIOMAS_POLAR = ['es', 'en', 'fr', 'de', 'nl', 'sv'];
+function idiomaCheckout(request) {
+  const cabecera = request.headers.get('accept-language') || '';
+  for (const parte of cabecera.split(',')) {
+    const codigo = parte.split(';')[0].trim().toLowerCase().split('-')[0];
+    if (IDIOMAS_POLAR.includes(codigo)) return codigo;
+  }
+  return 'es';
+}
+
 // ----- Polar: suscripción en dólares (tarjeta) --------------------------------
 // Polar actúa como "Merchant of Record": es quien vende, cobra y se ocupa de los impuestos.
-async function crearLinkPolar(env, usuario, periodo, ip) {
+async function crearLinkPolar(env, usuario, periodo, ip, idioma) {
   const producto = periodo === 'anual' ? env.POLAR_PRODUCT_ID_ANUAL : env.POLAR_PRODUCT_ID;
   const base =
     String(env.POLAR_SERVER || '').trim().toLowerCase() === 'sandbox'
@@ -106,6 +114,7 @@ async function crearLinkPolar(env, usuario, periodo, ip) {
     metadata: { user_id: usuario.id, periodo }, // se copia a la suscripción
     success_url: sitio + '/cuenta.html?pago=ok',
     return_url: sitio + '/precios.html',
+    locale: idioma, // idioma del checkout de Polar
   };
   if (usuario.email) cuerpo.customer_email = usuario.email;
   // Para que Polar detecte bien el país (impuestos y moneda) hay que pasarle la IP real de la persona.
@@ -124,10 +133,7 @@ async function crearLinkPolar(env, usuario, periodo, ip) {
   const datos = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {
     console.error('Polar rechazó el checkout. Estado:', respuesta.status, JSON.stringify(datos && (datos.detail || datos.error || datos)));
-    const motivo = respuesta.status + ': ' + JSON.stringify((datos && (datos.detail || datos.error)) || '').slice(0, 160);
-    const falla = new Error('polar');
-    falla.detalle = motivo; // TEMPORAL (diagnóstico)
-    throw falla;
+    throw new Error('polar');
   }
   const url = datos && datos.url;
   if (!url) throw new Error('Polar no devolvió el link');
@@ -205,14 +211,8 @@ export async function onRequest(context) {
       return responder(401, { codigo: 'sin_sesion', error: 'Iniciá sesión para pasarte a Premium.' });
     }
     const usuario = await usuarioDelToken(env, m[1].trim());
-    if (!usuario || usuario.fallo) {
-      // TEMPORAL (diagnóstico): se muestra el motivo técnico para encontrar el problema. Se saca después.
-      const detalle = usuario && usuario.fallo ? usuario.fallo : '';
-      console.error('Sesión rechazada.', detalle);
-      return responder(401, {
-        codigo: 'sesion_invalida',
-        error: 'Tu sesión venció. Volvé a iniciar sesión.' + (detalle ? ' [' + detalle + ']' : ''),
-      });
+    if (!usuario) {
+      return responder(401, { codigo: 'sesion_invalida', error: 'Tu sesión venció. Volvé a iniciar sesión.' });
     }
 
     // 2) ¿Qué proveedor eligió?
@@ -243,14 +243,10 @@ export async function onRequest(context) {
       const productoElegido = periodo === 'anual' ? env.POLAR_PRODUCT_ID_ANUAL : env.POLAR_PRODUCT_ID;
       if (!env.POLAR_ACCESS_TOKEN || !productoElegido) {
         console.error('Faltan variables de Polar');
-        // TEMPORAL (diagnóstico): se indica cuál falta. Se saca después.
-        const falta = [];
-        if (!env.POLAR_ACCESS_TOKEN) falta.push('POLAR_ACCESS_TOKEN');
-        if (!productoElegido) falta.push(periodo === 'anual' ? 'POLAR_PRODUCT_ID_ANUAL' : 'POLAR_PRODUCT_ID');
-        return responder(503, { error: 'El pago con tarjeta todavía no está disponible. [falta: ' + falta.join(', ') + ']' });
+        return responder(503, { error: 'El pago con tarjeta todavía no está disponible.' });
       }
       const ip = request.headers.get('CF-Connecting-IP') || '';
-      url = await crearLinkPolar(env, usuario, periodo, ip);
+      url = await crearLinkPolar(env, usuario, periodo, ip, idiomaCheckout(request));
     } else {
       const precioElegido = periodo === 'anual' ? env.MP_PRECIO_ARS_ANUAL : env.MP_PRECIO_ARS;
       if (!env.MP_ACCESS_TOKEN || !precioElegido) {
@@ -263,9 +259,6 @@ export async function onRequest(context) {
     return responder(200, { url });
   } catch (e) {
     console.error('Error en /api/crear-pago:', e && e.name, e && e.message);
-    return responder(502, {
-      error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' + (e && e.detalle ? ' [Polar ' + e.detalle + ']' : ''),
-    });
+    return responder(502, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' });
   }
 }
-
