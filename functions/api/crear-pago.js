@@ -192,7 +192,7 @@ export async function onRequest(context) {
   const { request } = context;
   // Se sacan espacios o saltos de línea que pudieron quedar al pegar las variables.
   const env = Object.assign({}, context.env);
-  ['SUPABASE_SERVICE_ROLE_KEY', 'POLAR_ACCESS_TOKEN', 'POLAR_PRODUCT_ID', 'POLAR_PRODUCT_ID_ANUAL'].forEach((k) => {
+  ['SUPABASE_SERVICE_ROLE_KEY', 'POLAR_ACCESS_TOKEN', 'POLAR_PRODUCT_ID', 'POLAR_PRODUCT_ID_ANUAL', 'MP_ACCESS_TOKEN', 'MP_PRECIO_ARS', 'MP_PRECIO_ARS_ANUAL'].forEach((k) => {
     if (typeof env[k] === 'string') env[k] = env[k].trim();
   });
 
@@ -251,7 +251,14 @@ export async function onRequest(context) {
       const precioElegido = periodo === 'anual' ? env.MP_PRECIO_ARS_ANUAL : env.MP_PRECIO_ARS;
       if (!env.MP_ACCESS_TOKEN || !precioElegido) {
         console.error('Faltan variables de Mercado Pago');
-        return responder(503, { error: 'El pago con Mercado Pago todavía no está disponible.' });
+        // TEMPORAL (diagnóstico): se indica cuál falta y qué nombres ve el sitio (solo nombres, nunca valores).
+        const falta = [];
+        if (!env.MP_ACCESS_TOKEN) falta.push('MP_ACCESS_TOKEN');
+        if (!precioElegido) falta.push(periodo === 'anual' ? 'MP_PRECIO_ARS_ANUAL' : 'MP_PRECIO_ARS');
+        const vistas = Object.keys(env).filter((k) => /^mp|polar|supabase/i.test(k));
+        return responder(503, {
+          error: 'El pago con Mercado Pago todavía no está disponible. [falta: ' + falta.join(', ') + '] [nombres vistos: ' + JSON.stringify(vistas) + ']',
+        });
       }
       url = await crearLinkMercadoPago(env, usuario, periodo);
     }
