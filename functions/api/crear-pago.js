@@ -183,7 +183,10 @@ async function crearLinkMercadoPago(env, usuario, periodo) {
   const datos = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {
     console.error('Mercado Pago rechazó la preferencia. Estado:', respuesta.status, JSON.stringify(datos && datos.message));
-    throw new Error('mercadopago');
+    const falla = new Error('mercadopago');
+    // TEMPORAL (diagnóstico): motivo que dio Mercado Pago. Se saca después.
+    falla.detalle = 'Mercado Pago ' + respuesta.status + ': ' + JSON.stringify((datos && (datos.message || datos.error || datos.cause)) || '').slice(0, 200);
+    throw falla;
   }
   // Si el access token es de PRUEBA, init_point igual sirve con usuarios de prueba.
   const url = datos && datos.init_point;
@@ -276,7 +279,8 @@ export async function onRequest(context) {
     return responder(200, { url });
   } catch (e) {
     console.error('Error en /api/crear-pago:', e && e.name, e && e.message);
-    return responder(502, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' });
+    // TEMPORAL (diagnóstico): se muestra el motivo técnico. Se saca después.
+    const motivo = (e && e.detalle) || ((e && e.name) + ': ' + String((e && e.message) || '').slice(0, 120));
+    return responder(502, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos. [' + motivo + ']' });
   }
 }
-
