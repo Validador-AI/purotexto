@@ -124,7 +124,10 @@ async function crearLinkPolar(env, usuario, periodo, ip) {
   const datos = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {
     console.error('Polar rechazó el checkout. Estado:', respuesta.status, JSON.stringify(datos && (datos.detail || datos.error || datos)));
-    throw new Error('polar');
+    const motivo = respuesta.status + ': ' + JSON.stringify((datos && (datos.detail || datos.error)) || '').slice(0, 160);
+    const falla = new Error('polar');
+    falla.detalle = motivo; // TEMPORAL (diagnóstico)
+    throw falla;
   }
   const url = datos && datos.url;
   if (!url) throw new Error('Polar no devolvió el link');
@@ -240,7 +243,11 @@ export async function onRequest(context) {
       const productoElegido = periodo === 'anual' ? env.POLAR_PRODUCT_ID_ANUAL : env.POLAR_PRODUCT_ID;
       if (!env.POLAR_ACCESS_TOKEN || !productoElegido) {
         console.error('Faltan variables de Polar');
-        return responder(503, { error: 'El pago con tarjeta todavía no está disponible.' });
+        // TEMPORAL (diagnóstico): se indica cuál falta. Se saca después.
+        const falta = [];
+        if (!env.POLAR_ACCESS_TOKEN) falta.push('POLAR_ACCESS_TOKEN');
+        if (!productoElegido) falta.push(periodo === 'anual' ? 'POLAR_PRODUCT_ID_ANUAL' : 'POLAR_PRODUCT_ID');
+        return responder(503, { error: 'El pago con tarjeta todavía no está disponible. [falta: ' + falta.join(', ') + ']' });
       }
       const ip = request.headers.get('CF-Connecting-IP') || '';
       url = await crearLinkPolar(env, usuario, periodo, ip);
@@ -256,6 +263,8 @@ export async function onRequest(context) {
     return responder(200, { url });
   } catch (e) {
     console.error('Error en /api/crear-pago:', e && e.name, e && e.message);
-    return responder(502, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' });
+    return responder(502, {
+      error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' + (e && e.detalle ? ' [Polar ' + e.detalle + ']' : ''),
+    });
   }
 }
