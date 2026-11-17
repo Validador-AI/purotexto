@@ -250,3 +250,4 @@ export async function onRequest(context) {
     return responder(500, { error: 'Error al procesar.' });
   }
 }
+
