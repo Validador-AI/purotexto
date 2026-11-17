@@ -68,7 +68,11 @@ async function usuarioDelToken(env, token) {
     method: 'GET',
     headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + token },
   });
-  if (respuesta.status === 401 || respuesta.status === 403) return null;
+  if (respuesta.status === 401 || respuesta.status === 403) {
+    // TEMPORAL (diagnóstico): se guarda lo que contestó Supabase para poder mostrarlo.
+    const texto = await respuesta.text().catch(() => '');
+    return { fallo: 'Supabase ' + respuesta.status + ': ' + texto.replace(/\s+/g, ' ').slice(0, 140) };
+  }
   if (!respuesta.ok) throw new Error('Supabase auth respondió ' + respuesta.status);
   const usuario = await respuesta.json();
   return usuario && usuario.id ? { id: usuario.id, email: usuario.email || '' } : null;
@@ -211,8 +215,14 @@ export async function onRequest(context) {
       return responder(401, { codigo: 'sin_sesion', error: 'Iniciá sesión para pasarte a Premium.' });
     }
     const usuario = await usuarioDelToken(env, m[1].trim());
-    if (!usuario) {
-      return responder(401, { codigo: 'sesion_invalida', error: 'Tu sesión venció. Volvé a iniciar sesión.' });
+    if (!usuario || usuario.fallo) {
+      // TEMPORAL (diagnóstico): se muestra el motivo técnico. Se saca después.
+      const detalle = usuario && usuario.fallo ? usuario.fallo : '';
+      console.error('Sesión rechazada.', detalle);
+      return responder(401, {
+        codigo: 'sesion_invalida',
+        error: 'Tu sesión venció. Volvé a iniciar sesión.' + (detalle ? ' [' + detalle + ']' : ''),
+      });
     }
 
     // 2) ¿Qué proveedor eligió?
