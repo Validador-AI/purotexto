@@ -149,13 +149,32 @@
   function cargarPublicidad() {
     if (publicidadCargada || !estado.listo || estado.error || estado.premium) return;
     // Lugares donde puede ir un banner (cada página tiene los que necesite)
-    var lugares = ['anuncio-medio', 'anuncio-nativo', 'anuncio-pie'];
+    var lugares = ['anuncio-resultado', 'anuncio-medio', 'anuncio-nativo', 'anuncio-pie'];
     var hay = false;
     lugares.forEach(function (id) {
       var cont = document.getElementById(id);
-      if (cont) { hay = true; ponerBanner(cont); }
+      if (!cont) return;
+      hay = true;
+      if (id === 'anuncio-resultado') cargarCuandoSeVea(cont); else ponerBanner(cont);
     });
     if (hay) publicidadCargada = true;
+  }
+
+  // El anuncio de debajo del resultado se carga recién cuando el resultado aparece en pantalla
+  // (así no se cuenta una impresión de un anuncio que nadie vio).
+  function cargarCuandoSeVea(cont) {
+    var caja = cont.closest('section');
+    if (!caja) { ponerBanner(cont); return; }
+    var obs = null;
+    function revisar() {
+      if (caja.hidden) return;
+      if (obs) obs.disconnect();
+      ponerBanner(cont);
+    }
+    if (!window.MutationObserver) { ponerBanner(cont); return; }
+    obs = new MutationObserver(revisar);
+    obs.observe(caja, { attributes: true, attributeFilter: ['hidden'] });
+    revisar();
   }
 
   // Banner nativo: no tiene medida fija. El anuncio le avisa su alto y el espacio se ajusta.
