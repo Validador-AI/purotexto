@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<title>Publicidad</title>
+<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}</style>
+</head>
+<body>
+<script async="async" data-cfasync="false" src="https://bauval.org/21/a1033baf88ca4dd55c097d6078d26178"></script>
+<div id="container-a1033baf88ca4dd55c097d6078d26178"></div>
+<script>
+  // Le avisa a la página cuánto mide el anuncio, para que el espacio se ajuste solo.
+  (function () {
+    var ultimo = -1;
+    function avisar() {
+      var alto = Math.ceil(document.body.getBoundingClientRect().height);
+      if (alto === ultimo) return;
+      ultimo = alto;
+      try { parent.postMessage({ tipo: 'pt-anuncio-alto', alto: alto }, '*'); } catch (e) {}
+    }
+    if (window.ResizeObserver) new ResizeObserver(avisar).observe(document.body);
+    var veces = 0;
+    var reloj = setInterval(function () { avisar(); if (++veces > 15) clearInterval(reloj); }, 1000);
+    window.addEventListener('load', avisar);
+  })();
+</script>
+</body>
+</html>

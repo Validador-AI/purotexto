@@ -149,7 +149,7 @@
   function cargarPublicidad() {
     if (publicidadCargada || !estado.listo || estado.error || estado.premium) return;
     // Lugares donde puede ir un banner (cada página tiene los que necesite)
-    var lugares = ['anuncio-medio', 'anuncio-pie'];
+    var lugares = ['anuncio-medio', 'anuncio-nativo', 'anuncio-pie'];
     var hay = false;
     lugares.forEach(function (id) {
       var cont = document.getElementById(id);
@@ -158,7 +158,37 @@
     if (hay) publicidadCargada = true;
   }
 
+  // Banner nativo: no tiene medida fija. El anuncio le avisa su alto y el espacio se ajusta.
+  function ponerNativo(cont) {
+    cont.style.width = '100%';
+    cont.style.maxWidth = '728px';
+    var f = document.createElement('iframe');
+    f.src = ORIGEN_PUBLICIDAD + '/anuncio-nativo.html';
+    f.title = 'Publicidad';
+    f.style.width = '100%';
+    f.style.height = '250px';
+    f.style.border = '0';
+    f.setAttribute('scrolling', 'no');
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    cont.appendChild(f);
+    if (!ponerNativo.escuchando) {
+      ponerNativo.escuchando = true;
+      window.addEventListener('message', function (e) {
+        if (e.origin !== ORIGEN_PUBLICIDAD || !e.data || e.data.tipo !== 'pt-anuncio-alto') return;
+        var marcos = document.querySelectorAll('[data-tipo="nativo"] iframe, #anuncio-nativo iframe');
+        for (var i = 0; i < marcos.length; i++) {
+          if (marcos[i].contentWindow !== e.source) continue;
+          var alto = Math.min(Number(e.data.alto) || 0, 600);
+          var caja = marcos[i].parentNode;
+          if (alto < 40) { caja.style.display = 'none'; }
+          else { caja.style.display = 'block'; marcos[i].style.height = alto + 'px'; }
+        }
+      });
+    }
+  }
+
   function ponerBanner(cont) {
+    if (cont.getAttribute('data-tipo') === 'nativo' || cont.id === 'anuncio-nativo') { ponerNativo(cont); return; }
     var espacio = cont.parentNode ? cont.parentNode.clientWidth : window.innerWidth;
     var grande = espacio >= 760;
     var ancho = grande ? 728 : 320;
