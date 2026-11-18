@@ -68,11 +68,7 @@ async function usuarioDelToken(env, token) {
     method: 'GET',
     headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + token },
   });
-  if (respuesta.status === 401 || respuesta.status === 403) {
-    // TEMPORAL (diagnóstico): se guarda lo que contestó Supabase para poder mostrarlo.
-    const texto = await respuesta.text().catch(() => '');
-    return { fallo: 'Supabase ' + respuesta.status + ': ' + texto.replace(/\s+/g, ' ').slice(0, 140) };
-  }
+  if (respuesta.status === 401 || respuesta.status === 403) return null;
   if (!respuesta.ok) throw new Error('Supabase auth respondió ' + respuesta.status);
   const usuario = await respuesta.json();
   return usuario && usuario.id ? { id: usuario.id, email: usuario.email || '' } : null;
@@ -183,10 +179,7 @@ async function crearLinkMercadoPago(env, usuario, periodo) {
   const datos = await respuesta.json().catch(() => null);
   if (!respuesta.ok) {
     console.error('Mercado Pago rechazó la preferencia. Estado:', respuesta.status, JSON.stringify(datos && datos.message));
-    const falla = new Error('mercadopago');
-    // TEMPORAL (diagnóstico): motivo que dio Mercado Pago. Se saca después.
-    falla.detalle = 'Mercado Pago ' + respuesta.status + ': ' + JSON.stringify((datos && (datos.message || datos.error || datos.cause)) || '').slice(0, 200);
-    throw falla;
+    throw new Error('mercadopago');
   }
   // Si el access token es de PRUEBA, init_point igual sirve con usuarios de prueba.
   const url = datos && datos.init_point;
@@ -218,14 +211,8 @@ export async function onRequest(context) {
       return responder(401, { codigo: 'sin_sesion', error: 'Iniciá sesión para pasarte a Premium.' });
     }
     const usuario = await usuarioDelToken(env, m[1].trim());
-    if (!usuario || usuario.fallo) {
-      // TEMPORAL (diagnóstico): se muestra el motivo técnico. Se saca después.
-      const detalle = usuario && usuario.fallo ? usuario.fallo : '';
-      console.error('Sesión rechazada.', detalle);
-      return responder(401, {
-        codigo: 'sesion_invalida',
-        error: 'Tu sesión venció. Volvé a iniciar sesión.' + (detalle ? ' [' + detalle + ']' : ''),
-      });
+    if (!usuario) {
+      return responder(401, { codigo: 'sesion_invalida', error: 'Tu sesión venció. Volvé a iniciar sesión.' });
     }
 
     // 2) ¿Qué proveedor eligió?
@@ -264,14 +251,7 @@ export async function onRequest(context) {
       const precioElegido = periodo === 'anual' ? env.MP_PRECIO_ARS_ANUAL : env.MP_PRECIO_ARS;
       if (!env.MP_ACCESS_TOKEN || !precioElegido) {
         console.error('Faltan variables de Mercado Pago');
-        // TEMPORAL (diagnóstico): se indica cuál falta y qué nombres ve el sitio (solo nombres, nunca valores).
-        const falta = [];
-        if (!env.MP_ACCESS_TOKEN) falta.push('MP_ACCESS_TOKEN');
-        if (!precioElegido) falta.push(periodo === 'anual' ? 'MP_PRECIO_ARS_ANUAL' : 'MP_PRECIO_ARS');
-        const vistas = Object.keys(env).filter((k) => /^mp|polar|supabase/i.test(k));
-        return responder(503, {
-          error: 'El pago con Mercado Pago todavía no está disponible. [falta: ' + falta.join(', ') + '] [nombres vistos: ' + JSON.stringify(vistas) + ']',
-        });
+        return responder(503, { error: 'El pago con Mercado Pago todavía no está disponible.' });
       }
       url = await crearLinkMercadoPago(env, usuario, periodo);
     }
@@ -279,9 +259,7 @@ export async function onRequest(context) {
     return responder(200, { url });
   } catch (e) {
     console.error('Error en /api/crear-pago:', e && e.name, e && e.message);
-    // TEMPORAL (diagnóstico): se muestra el motivo técnico. Se saca después.
-    const motivo = (e && e.detalle) || ((e && e.name) + ': ' + String((e && e.message) || '').slice(0, 120));
     // Se usa 500 y no 502: Cloudflare reemplaza cualquier 502 por su propia página de error y el mensaje no llega.
-    return responder(500, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos. [' + motivo + ']' });
+    return responder(500, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' });
   }
 }
