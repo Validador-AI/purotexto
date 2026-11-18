@@ -159,6 +159,8 @@
   }
 
   // Banner nativo: no tiene medida fija. El anuncio le avisa su alto y el espacio se ajusta.
+  // Si en ~10 segundos no llegó ningún anuncio: en el espacio del medio se pone el banner
+  // chato de siempre, y en los demás se oculta el espacio (no queda un cartel vacío).
   function ponerNativo(cont) {
     cont.style.width = '100%';
     cont.style.maxWidth = '728px';
@@ -171,17 +173,31 @@
     f.setAttribute('scrolling', 'no');
     f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox');
     cont.appendChild(f);
+
+    setTimeout(function () {
+      if (cont.getAttribute('data-lleno') === '1') return;
+      if (f.parentNode) f.parentNode.removeChild(f);
+      if (cont.id === 'anuncio-medio') {
+        cont.removeAttribute('data-tipo');
+        cont.style.width = '';
+        cont.style.maxWidth = '';
+        ponerChato(cont);
+      } else {
+        cont.style.display = 'none';
+      }
+    }, 10000);
+
     if (!ponerNativo.escuchando) {
       ponerNativo.escuchando = true;
       window.addEventListener('message', function (e) {
         if (e.origin !== ORIGEN_PUBLICIDAD || !e.data || e.data.tipo !== 'pt-anuncio-alto') return;
-        var marcos = document.querySelectorAll('[data-tipo="nativo"] iframe, #anuncio-nativo iframe');
+        var alto = Math.min(Number(e.data.alto) || 0, 600);
+        if (alto < 40) return;
+        var marcos = document.querySelectorAll('iframe');
         for (var i = 0; i < marcos.length; i++) {
           if (marcos[i].contentWindow !== e.source) continue;
-          var alto = Math.min(Number(e.data.alto) || 0, 600);
-          var caja = marcos[i].parentNode;
-          if (alto < 40) { caja.style.display = 'none'; }
-          else { caja.style.display = 'block'; marcos[i].style.height = alto + 'px'; }
+          marcos[i].style.height = alto + 'px';
+          if (marcos[i].parentNode) marcos[i].parentNode.setAttribute('data-lleno', '1');
         }
       });
     }
@@ -189,6 +205,10 @@
 
   function ponerBanner(cont) {
     if (cont.getAttribute('data-tipo') === 'nativo' || cont.id === 'anuncio-nativo') { ponerNativo(cont); return; }
+    ponerChato(cont);
+  }
+
+  function ponerChato(cont) {
     var espacio = cont.parentNode ? cont.parentNode.clientWidth : window.innerWidth;
     var grande = espacio >= 760;
     var ancho = grande ? 728 : 320;
