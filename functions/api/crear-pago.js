@@ -196,6 +196,15 @@ export async function onRequest(context) {
     if (typeof env[k] === 'string') env[k] = env[k].trim();
   });
 
+  // Después de pagar se vuelve al MISMO dominio desde el que se pagó (con o sin www).
+  // La sesión se guarda por dominio: si se volviera al otro, la persona aparecería sin sesión iniciada.
+  try {
+    const origen = new URL(request.url);
+    if (origen.hostname === 'purotexto.com' || origen.hostname === 'www.purotexto.com') env.SITIO_URL = origen.origin;
+  } catch (e) {
+    /* se usa la dirección por defecto */
+  }
+
   if (request.method !== 'POST') {
     return responder(405, { error: 'Método no permitido.' });
   }
@@ -263,4 +272,3 @@ export async function onRequest(context) {
     return responder(500, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos.' });
   }
 }
-
