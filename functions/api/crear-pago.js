@@ -281,6 +281,7 @@ export async function onRequest(context) {
     console.error('Error en /api/crear-pago:', e && e.name, e && e.message);
     // TEMPORAL (diagnóstico): se muestra el motivo técnico. Se saca después.
     const motivo = (e && e.detalle) || ((e && e.name) + ': ' + String((e && e.message) || '').slice(0, 120));
-    return responder(502, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos. [' + motivo + ']' });
+    // Se usa 500 y no 502: Cloudflare reemplaza cualquier 502 por su propia página de error y el mensaje no llega.
+    return responder(500, { error: 'No pudimos armar el pago. Probá de nuevo en unos minutos. [' + motivo + ']' });
   }
 }
