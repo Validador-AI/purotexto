@@ -99,6 +99,45 @@
       });
   }
 
+  // ---- Compartir: WhatsApp y copiar enlace (solo comparte el enlace del sitio, nunca el texto) ----
+  var ENLACE = 'https://purotexto.com/?origen=compartido';
+  var MENSAJE = 'Probé este detector de IA en español, gratis y sin registro: ' + ENLACE;
+
+  var estiloComp = document.createElement('style');
+  estiloComp.textContent =
+    '.pt-comp{margin:14px auto 0;max-width:560px;text-align:center;color:#264B4A}' +
+    '.pt-comp p{margin:0 0 10px;font-size:.9rem}' +
+    '.pt-comp-botones{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}' +
+    '.pt-comp a,.pt-comp button{font:inherit;font-size:.95rem;cursor:pointer;text-decoration:none;' +
+    'border-radius:999px;padding:9px 18px;border:1px solid #BCAD97;background:#DFD2BD;color:#264B4A}' +
+    '.pt-comp a:hover,.pt-comp button:hover{border-color:#B84E2E}' +
+    '.pt-comp-ok{min-height:1.2em;font-size:.85rem;margin-top:8px!important}';
+  document.head.appendChild(estiloComp);
+
+  var comp = document.createElement('div');
+  comp.className = 'pt-comp';
+  comp.innerHTML =
+    '<p>¿Conocés a alguien a quien le pueda servir?</p>' +
+    '<div class="pt-comp-botones">' +
+    '<a href="https://wa.me/?text=' + encodeURIComponent(MENSAJE) + '" target="_blank" rel="noopener">Compartir por WhatsApp</a>' +
+    '<button type="button" class="pt-comp-copiar">Copiar enlace</button>' +
+    '</div>' +
+    '<p class="pt-comp-ok" role="status"></p>';
+  caja.parentNode.insertBefore(comp, caja.nextSibling);
+
+  comp.querySelector('.pt-comp-copiar').addEventListener('click', function () {
+    var aviso = comp.querySelector('.pt-comp-ok');
+    function listo(ok) {
+      aviso.textContent = ok ? '¡Enlace copiado!' : 'No pudimos copiarlo. Copialo a mano: ' + ENLACE;
+      setTimeout(function () { aviso.textContent = ''; }, 4000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ENLACE).then(function () { listo(true); }, function () { listo(false); });
+    } else {
+      listo(false);
+    }
+  });
+
   armar();
 
   // Cada vez que aparece un resultado nuevo, el cuadro vuelve a empezar.
