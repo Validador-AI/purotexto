@@ -91,6 +91,7 @@ Reglas:
 3. Si el texto original usa voseo, tuteo, modismos regionales o cualquier particularidad dialectal, conservalos tal cual; no los neutralices ni los reemplaces por una variante "genérica" del idioma.
 4. Variá la estructura de las oraciones y el vocabulario, pero mantené el tono y el registro (formal, informal, técnico, etc.) del texto original.
 5. Mantené aproximadamente la misma extensión que el texto original.
+6. Antes de responder, revisá tu texto reescrito: todas las palabras tienen que existir y estar bien escritas, con la conjugación y la concordancia correctas. Si encontrás un error, corregilo.
 
 FORMATO DE RESPUESTA (obligatorio)
 Respondé ÚNICAMENTE con un JSON válido. Sin texto antes ni después, sin comentarios y sin bloques de código de markdown (sin \`\`\`). Usá comillas dobles y escapá las comillas internas y los saltos de línea. El texto reescrito va completo en el campo "reescrito", sin comillas de más, sin encabezados ni explicaciones. La estructura exacta es:
