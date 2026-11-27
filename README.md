@@ -1,77 +1,130 @@
-# Validador de Autenticidad de Texto (versión Cloudflare, con subida de archivos)
+# PuroTexto
 
-Pegás un texto, o subís un PDF o un Word (.docx), y te dice si suena humano o a IA, con las frases que lo delatan y cómo reescribirlas.
+Sitio web con herramientas de texto con IA, en español: detecta si un texto suena humano o a IA, lo reescribe para que suene natural, resume, traduce con contexto, verifica gramática, compara textos y cuenta palabras.
 
-## Qué hay en cada archivo
+Sitio: https://purotexto.com
+
+## Cómo está armado
+
+| Pieza | Qué hace |
+|---|---|
+| **Cloudflare Pages** | Publica el sitio. Cada vez que se sube un cambio a GitHub, se vuelve a desplegar solo. |
+| **GitHub** | Guarda el código. |
+| **Supabase** | Cuentas de usuario, cupos de uso diarios, perfiles Premium y opiniones. |
+| **Gemini (Google)** | El modelo de IA de todas las herramientas. |
+| **Polar** | Cobro de Premium con tarjeta, en dólares. |
+| **Mercado Pago** | Cobro de Premium en pesos. |
+| **Cloudflare Turnstile** | Verificación anti-bots al iniciar sesión y registrarse. |
+
+## Carpetas
+
+- `public/` — el sitio que ve la gente (páginas, estilos y scripts).
+- `functions/api/` — los "intermediarios": código que corre en Cloudflare y guarda las claves secretas.
+- `wrangler.toml` — configuración de Cloudflare Pages (nombre del proyecto y carpeta `public`).
+- `package.json` y `package-lock.json` — la única librería que usa el proyecto. No los edites ni los borres.
+
+Las carpetas `public` y `functions` tienen que llamarse exactamente así.
+
+## Páginas (`public/`)
+
+**Herramientas**
+
+| Página | Herramienta |
+|---|---|
+| `index.html` | Detector de IA (también acepta PDF y Word) |
+| `parafraseador.html` | Parafraseador (humanizar texto) |
+| `resumen.html` | Resumen IA |
+| `traductor.html` | Traductor con contexto |
+| `gramatica.html` | Verificador de gramática |
+| `comparacion.html` | Comparación de textos |
+| `contador.html` | Contador de palabras |
+
+**Otras páginas:** `articulos.html` y los cuatro `articulo-*.html`, `precios.html`, `cuenta.html`, `acerca.html`, `contacto.html`, `privacidad.html` y `terminos.html`.
+
+**Scripts compartidos**
 
 | Archivo | Para qué sirve |
 |---|---|
-| `public/index.html` | La página que ve la gente (diseño, botones y subida de archivos). |
-| `netlify/functions/analizar.mjs` | El intermediario: lee el archivo, extrae el texto y habla con Gemini usando tu clave secreta. Responde en `/api/analizar`. |
-| `netlify.toml` | Le dice a Netlify dónde está la página (`public`), dónde las funciones (`netlify/functions`) y qué versión de Node usar. |
-| `package.json` | Lista las dos librerías que usa el proyecto. |
-| `package-lock.json` | Fija las versiones exactas de esas librerías. No lo edites ni lo borres. |
+| `limites.js` | Cupos de uso diarios (Freemium) en todas las herramientas. |
+| `captcha-auth.js` | Verificación anti-bots (Turnstile) en inicio de sesión y registro. |
+| `exportar-pdf.js` | Exportar a PDF (solo Premium). |
+| `opinion-widget.js` | El cuadro "¿Te sirvió?" en el inicio. |
+| `pwa.js`, `sw.js`, `manifest.json` | Hacen que el sitio se pueda instalar como app. |
+| `tema.js` | Botón de modo claro/oscuro. |
+| `supabase-js.js` | Librería de Supabase. |
 
-Las carpetas `public` y `netlify` tienen que llamarse exactamente así.
+**Publicidad:** los archivos `anuncio-*.html` son los espacios de anuncios. Tienen `noindex` para que Google no los indexe.
 
-## Librerías
+**Otros:** `_headers` (seguridad y caché), `robots.txt`, `sitemap.xml`, íconos e imágenes para compartir.
 
-- **unpdf** (1.8.1): lee el texto de los PDF. Funciona en servidores como los de Netlify, sin programas extra.
-- **mammoth** (1.12.3): lee el texto de los archivos Word (.docx).
+## Intermediarios (`functions/api/`)
 
-No tenés que instalar nada: Netlify las descarga solo al desplegar.
+Cada archivo se publica solo en `/api/<nombre>`.
 
-## Cómo actualizar tu sitio (si ya lo tenías publicado)
+| Archivo | Qué hace |
+|---|---|
+| `analizar.js` | Detector de IA. Lee texto, PDF y Word. |
+| `parafrasear.js` | Parafraseador. |
+| `resumir.js` | Resumen IA. |
+| `traducir.js` | Traductor con contexto. |
+| `gramatica.js` | Verificador de gramática. |
+| `comparar.js` | Comparación de textos. |
+| `opinion.js` | Guarda el "¿Te sirvió?". |
+| `precios.js` | Devuelve los precios en pesos para mostrar en `precios.html`. |
+| `crear-pago.js` | Crea el link de pago (Polar o Mercado Pago). Manda a Polar el idioma del navegador (si no lo reconoce, español). |
+| `webhook-polar.js` | Recibe los avisos de Polar y activa o desactiva el Premium. |
+| `webhook-mercadopago.js` | Recibe los avisos de Mercado Pago y activa el Premium. |
 
-1. Descomprimí el ZIP nuevo.
-2. En tu repositorio de GitHub, hacé clic en **Add file > Upload files**.
-3. Arrastrá los archivos y carpetas: `netlify.toml`, `package.json`, `package-lock.json`, `README.md`, la carpeta `public` y la carpeta `netlify`. Los que ya existen se reemplazan.
-4. Hacé clic en **Commit changes**.
-5. Netlify detecta el cambio y vuelve a desplegar solo. Esperá uno o dos minutos.
+## Límites de uso
 
-La variable `GEMINI_API_KEY` ya está cargada en Netlify: no hay que tocarla.
+| Tipo de cuenta | Análisis por día | Largo por texto |
+|---|---|---|
+| Sin cuenta | 3 | 5.000 caracteres |
+| Registrada (gratis) | 10 | 8.000 caracteres |
+| Premium | 20 | 20.000 caracteres |
 
-## Cómo funciona la subida de archivos
+El conteo se valida en el servidor (Supabase). Si Gemini falla, el análisis se le devuelve al cupo. Los números tienen que coincidir entre las funciones, las páginas y `precios.html`.
 
-- Formatos: PDF y Word (.docx). No se pueden leer los .doc viejos.
-- Tamaño máximo: 4 MB (Netlify no deja pasar pedidos de más de unos 6 MB).
-- El archivo se lee en la memoria del servidor y no se guarda.
-- Se analizan hasta los primeros 8000 caracteres. Si el archivo es más largo, la página avisa.
-- Los PDF tienen que tener texto que se pueda seleccionar. Los PDF escaneados (fotos de páginas) no se pueden leer: la página lo avisa y sugiere pegar el texto.
-- Los PDF con contraseña se rechazan con un mensaje claro.
-- El servidor mira el contenido real del archivo, no solo el nombre: cambiarle la extensión no sirve para colarlo.
+## Variables de entorno
 
-## Cómo probar que funciona
+Se cargan en Cloudflare: **Settings → Variables and Secrets**. Acá solo están los nombres, **nunca escribas valores en el código ni en GitHub**.
 
-1. Abrí la dirección de tu sitio en Netlify.
-2. Probá el modo "Pegar texto": "Usar un texto de ejemplo" y "Analizar texto".
-3. Cambiá a "Subir archivo", elegí un PDF o un Word con texto y apretá "Analizar texto".
-4. Probá subir un PDF escaneado o una foto renombrada a .pdf: tienen que aparecer mensajes claros, no una pantalla rota.
+| Variable | Para qué |
+|---|---|
+| `GEMINI_API_KEY` | Clave gratuita de Gemini (anónimos y registrados). |
+| `GEMINI_API_KEY_PREMIUM` | Clave paga de Gemini (Premium y países donde Google exige el servicio pago: Espacio Económico Europeo, Reino Unido y Suiza). |
+| `GEMINI_MODEL` | Opcional. Cambia el modelo de todas las herramientas a la vez. Por defecto, `gemini-3.5-flash-lite`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta de Supabase. |
+| `SUPABASE_URL` | Opcional. Si falta, se usa la dirección por defecto. |
+| `SITIO_URL` | Dirección del sitio (para volver desde el pago). |
+| `POLAR_ACCESS_TOKEN` | Acceso a la API de Polar. |
+| `POLAR_PRODUCT_ID` | Plan mensual en Polar. |
+| `POLAR_PRODUCT_ID_ANUAL` | Plan anual en Polar. |
+| `POLAR_WEBHOOK_SECRET` | Firma de los avisos de Polar. |
+| `POLAR_SERVER` | Opcional. `sandbox` para pruebas; vacío es producción real. |
+| `MP_ACCESS_TOKEN` | Acceso a la API de Mercado Pago. |
+| `MP_PRECIO_ARS` | Precio mensual en pesos. |
+| `MP_PRECIO_ARS_ANUAL` | Precio anual en pesos. |
+| `MP_WEBHOOK_SECRET` | Firma de los avisos de Mercado Pago. |
+
+## Cómo actualizar el sitio
+
+1. Entrá al repositorio en GitHub.
+2. Abrí la carpeta donde va el archivo (`public/` o `functions/api/`).
+3. **Add file → Upload files**, subí el archivo y elegí **Commit changes**. Si tiene el mismo nombre, reemplaza al anterior.
+4. Cloudflare detecta el cambio y despliega solo. Esperá uno o dos minutos y probá el sitio.
+
+Si después de un cambio el celular sigue mostrando la versión vieja, cambiá el número de `VERSION` en `public/sw.js`.
 
 ## Si algo falla
 
-| Mensaje o síntoma | Qué hacer |
-|---|---|
-| "No encontramos texto en este PDF" | Es un PDF escaneado. Pegá el texto, o pasalo por un programa de OCR y volvé a subirlo. |
-| "El archivo es muy grande" | Pesa más de 4 MB. Subí solo el fragmento que te interesa. |
-| "No pudimos leer este PDF / documento" | Puede estar dañado. Abrilo y guardalo de nuevo, o pegá el texto. |
-| La subida falla pero pegar texto funciona | Mirá en Netlify > **Deploys** si el último despliegue terminó bien (un error al instalar las librerías sale ahí). |
-| "El servidor todavía no tiene configurada la clave" | Falta `GEMINI_API_KEY`, no incluye el alcance **Functions**, o la agregaste y no volviste a desplegar. |
-| "La clave de Gemini no es válida" | Copiala de nuevo desde AI Studio, sin espacios al principio ni al final. |
-| "El modelo ... no existe o fue dado de baja" | Creá la variable `GEMINI_MODEL` con un modelo vigente y volvé a desplegar. |
-| "Se alcanzó el límite de uso gratuito" | Esperá un minuto. Si pasa seguido, el uso supera la capa gratuita de Gemini. |
-| La página muestra "Site not available" | Se gastaron los 300 créditos mensuales del plan gratuito de Netlify (se reinician cada mes). |
-
-Los detalles técnicos de cada error quedan en Netlify > tu sitio > **Logs > Functions**.
-
-## Cuidar la clave
-
-- La clave solo vive en Netlify (variable de entorno). No está en ningún archivo.
-- Nunca la pegues en `index.html`, en `netlify.toml`, en el repositorio, en capturas ni en chats.
-- Si sospechás que se filtró: en AI Studio borrala y creá una nueva, actualizá la variable en Netlify y volvé a desplegar.
+- **Una herramienta da error:** revisá los **Logs** del proyecto en Cloudflare Pages. Los mensajes dicen qué variable falta o qué respondió el servicio.
+- **"El modelo no existe":** revisá `GEMINI_MODEL`.
+- **"La clave no es válida":** revisá `GEMINI_API_KEY` o `GEMINI_API_KEY_PREMIUM`.
+- **Un pago no activa el Premium:** revisá los avisos (webhooks) en el panel de Polar o de Mercado Pago, y los logs de `webhook-polar` o `webhook-mercadopago`.
 
 ## Tené en cuenta
 
-- El texto (pegado o extraído de un archivo) viaja a Google. En la capa gratuita, Google puede usar esos contenidos para mejorar sus productos. Por eso la página avisa que no se suba información confidencial.
-- Este tipo de análisis es una estimación, no una prueba. Puede equivocarse en ambos sentidos.
-- El plan gratuito de Netlify tiene 300 créditos por mes. Si se agotan, el sitio se pausa hasta el mes siguiente.
+- Ningún detector de IA es 100% seguro: el resultado es una señal, no una prueba.
+- Los PDF tienen que tener texto seleccionable. Los escaneados (fotos de páginas) no se pueden leer.
+- Los archivos subidos se leen en memoria y no se guardan.
